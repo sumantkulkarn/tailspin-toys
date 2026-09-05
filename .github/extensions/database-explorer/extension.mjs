@@ -9,132 +9,132 @@ const MAX_DISPLAY_ROWS = 250;
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 function databaseUrl() {
-    return process.env.DATABASE_URL ?? `file:${join(PROJECT_ROOT, ".data", "tailspin.db")}`;
+  return process.env.DATABASE_URL ?? `file:${join(PROJECT_ROOT, ".data", "tailspin.db")}`;
 }
 
 function readRequestBody(request) {
-    return new Promise((resolve, reject) => {
-        let body = "";
-        request.setEncoding("utf8");
-        request.on("data", (chunk) => {
-            body += chunk;
-            if (body.length > 100_000) {
-                reject(new Error("Request body is too large."));
-                request.destroy();
-            }
-        });
-        request.on("end", () => resolve(body));
-        request.on("error", reject);
+  return new Promise((resolve, reject) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 100_000) {
+        reject(new Error("Request body is too large."));
+        request.destroy();
+      }
     });
+    request.on("end", () => resolve(body));
+    request.on("error", reject);
+  });
 }
 
 function stripCommentsAndValidateSingleStatement(sql) {
-    let output = "";
-    let quote = "";
-    let statementEnded = false;
+  let output = "";
+  let quote = "";
+  let statementEnded = false;
 
-    for (let index = 0; index < sql.length; index += 1) {
-        const character = sql[index];
-        const next = sql[index + 1];
-
-        if (quote) {
-            output += character;
-            if (character === quote) {
-                if (next === quote) {
-                    output += next;
-                    index += 1;
-                } else {
-                    quote = "";
-                }
-            }
-            continue;
-        }
-
-        if (character === "'" || character === '"' || character === "`") {
-            quote = character;
-            output += character;
-            continue;
-        }
-
-        if (character === "-" && next === "-") {
-            index = sql.indexOf("\n", index + 2);
-            if (index === -1) {
-                break;
-            }
-            output += " ";
-            continue;
-        }
-
-        if (character === "/" && next === "*") {
-            const end = sql.indexOf("*/", index + 2);
-            if (end === -1) {
-                throw new Error("The SQL comment is not closed.");
-            }
-            index = end + 1;
-            output += " ";
-            continue;
-        }
-
-        if (character === ";") {
-            statementEnded = true;
-            continue;
-        }
-
-        if (statementEnded && !/\s/.test(character)) {
-            throw new Error("Run one SQL statement at a time.");
-        }
-
-        output += character;
-    }
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index];
+    const next = sql[index + 1];
 
     if (quote) {
-        throw new Error("The SQL string is not closed.");
+      output += character;
+      if (character === quote) {
+        if (next === quote) {
+          output += next;
+          index += 1;
+        } else {
+          quote = "";
+        }
+      }
+      continue;
     }
 
-    return output.trim();
+    if (character === "'" || character === '"' || character === "`") {
+      quote = character;
+      output += character;
+      continue;
+    }
+
+    if (character === "-" && next === "-") {
+      index = sql.indexOf("\n", index + 2);
+      if (index === -1) {
+        break;
+      }
+      output += " ";
+      continue;
+    }
+
+    if (character === "/" && next === "*") {
+      const end = sql.indexOf("*/", index + 2);
+      if (end === -1) {
+        throw new Error("The SQL comment is not closed.");
+      }
+      index = end + 1;
+      output += " ";
+      continue;
+    }
+
+    if (character === ";") {
+      statementEnded = true;
+      continue;
+    }
+
+    if (statementEnded && !/\s/.test(character)) {
+      throw new Error("Run one SQL statement at a time.");
+    }
+
+    output += character;
+  }
+
+  if (quote) {
+    throw new Error("The SQL string is not closed.");
+  }
+
+  return output.trim();
 }
 
 function validateReadOnlyQuery(query) {
-    if (typeof query !== "string" || !query.trim()) {
-        throw new Error("Enter a SQL query.");
-    }
+  if (typeof query !== "string" || !query.trim()) {
+    throw new Error("Enter a SQL query.");
+  }
 
-    const statement = stripCommentsAndValidateSingleStatement(query);
-    const keyword = statement.match(/^([a-zA-Z]+)/)?.[1]?.toUpperCase();
-    if (keyword !== "SELECT" && keyword !== "WITH") {
-        throw new Error("Only read-only SELECT and WITH queries are allowed.");
-    }
+  const statement = stripCommentsAndValidateSingleStatement(query);
+  const keyword = statement.match(/^([a-zA-Z]+)/)?.[1]?.toUpperCase();
+  if (keyword !== "SELECT" && keyword !== "WITH") {
+    throw new Error("Only read-only SELECT and WITH queries are allowed.");
+  }
 
-    return statement;
+  return statement;
 }
 
 function normalizeValue(value) {
-    return typeof value === "bigint" ? value.toString() : value;
+  return typeof value === "bigint" ? value.toString() : value;
 }
 
 async function executeQuery(url, query) {
-    const client = createClient({ url });
-    try {
-        const result = await client.execute(query);
-        const columns = result.columns;
-        const rows = result.rows.slice(0, MAX_DISPLAY_ROWS).map((row) =>
-            Object.fromEntries(columns.map((column) => [column, normalizeValue(row[column])])),
-        );
-        return { columns, rows, truncated: result.rows.length > MAX_DISPLAY_ROWS };
-    } finally {
-        client.close();
-    }
+  const client = createClient({ url });
+  try {
+    const result = await client.execute(query);
+    const columns = result.columns;
+    const rows = result.rows.slice(0, MAX_DISPLAY_ROWS).map((row) =>
+      Object.fromEntries(columns.map((column) => [column, normalizeValue(row[column])])),
+    );
+    return { columns, rows, truncated: result.rows.length > MAX_DISPLAY_ROWS };
+  } finally {
+    client.close();
+  }
 }
 
 async function listTables(url) {
-    return executeQuery(
-        url,
-        "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
-    );
+  return executeQuery(
+    url,
+    "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
+  );
 }
 
 function renderHtml() {
-    return `<!doctype html>
+  return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -283,81 +283,81 @@ function renderHtml() {
 }
 
 async function startServer(url) {
-    const server = createServer(async (request, response) => {
-        try {
-            if (request.url === "/api/tables" && request.method === "GET") {
-                const data = await listTables(url);
-                response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-                response.end(JSON.stringify(data));
-                return;
-            }
+  const server = createServer(async (request, response) => {
+    try {
+      if (request.url === "/api/tables" && request.method === "GET") {
+        const data = await listTables(url);
+        response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(data));
+        return;
+      }
 
-            if (request.url === "/api/query" && request.method === "POST") {
-                const body = JSON.parse(await readRequestBody(request));
-                const data = await executeQuery(url, validateReadOnlyQuery(body.query));
-                response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-                response.end(JSON.stringify(data));
-                return;
-            }
+      if (request.url === "/api/query" && request.method === "POST") {
+        const body = JSON.parse(await readRequestBody(request));
+        const data = await executeQuery(url, validateReadOnlyQuery(body.query));
+        response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(data));
+        return;
+      }
 
-            response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-            response.end(renderHtml());
-        } catch (error) {
-            response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-            response.end(JSON.stringify({ error: error instanceof Error ? error.message : "The request failed." }));
-        }
-    });
-    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const address = server.address();
-    const port = typeof address === "object" && address ? address.port : 0;
-    return { server, url: `http://127.0.0.1:${port}/` };
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(renderHtml());
+    } catch (error) {
+      response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : "The request failed." }));
+    }
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  return { server, url: `http://127.0.0.1:${port}/` };
 }
 
 await joinSession({
-    canvases: [
-        createCanvas({
-            id: "database-explorer",
-            displayName: "Database Explorer",
-            description: "Explore this project's SQLite tables and run read-only SQL queries.",
-            actions: [
-                {
-                    name: "list_tables",
-                    description: "List tables and views in the project SQLite database.",
-                    handler: async () => listTables(databaseUrl()),
-                },
-                {
-                    name: "run_query",
-                    description: "Run one read-only SELECT or WITH query against the project SQLite database.",
-                    inputSchema: {
-                        type: "object",
-                        properties: { query: { type: "string", minLength: 1 } },
-                        required: ["query"],
-                        additionalProperties: false,
-                    },
-                    handler: async (ctx) => {
-                        try {
-                            return executeQuery(databaseUrl(), validateReadOnlyQuery(ctx.input?.query));
-                        } catch (error) {
-                            throw new CanvasError("database_query_invalid", error instanceof Error ? error.message : "The query is invalid.");
-                        }
-                    },
-                },
-            ],
-            open: async (ctx) => {
-                let entry = servers.get(ctx.instanceId);
-                if (!entry) {
-                    entry = await startServer(databaseUrl());
-                    servers.set(ctx.instanceId, entry);
-                }
-                return { title: "Database Explorer", url: entry.url };
-            },
-            onClose: async (ctx) => {
-                const entry = servers.get(ctx.instanceId);
-                if (entry) {
-                    servers.delete(ctx.instanceId);
-                    await new Promise((resolve) => entry.server.close(resolve));
-                }
-            },
-        }),
-    ],
+  canvases: [
+    createCanvas({
+      id: "database-explorer",
+      displayName: "Database Explorer",
+      description: "Explore this project's SQLite tables and run read-only SQL queries.",
+      actions: [
+        {
+          name: "list_tables",
+          description: "List tables and views in the project SQLite database.",
+          handler: async () => listTables(databaseUrl()),
+        },
+        {
+          name: "run_query",
+          description: "Run one read-only SELECT or WITH query against the project SQLite database.",
+          inputSchema: {
+            type: "object",
+            properties: { query: { type: "string", minLength: 1 } },
+            required: ["query"],
+            additionalProperties: false,
+          },
+          handler: async (ctx) => {
+            try {
+              return executeQuery(databaseUrl(), validateReadOnlyQuery(ctx.input?.query));
+            } catch (error) {
+              throw new CanvasError("database_query_invalid", error instanceof Error ? error.message : "The query is invalid.");
+            }
+          },
+        },
+      ],
+      open: async (ctx) => {
+        let entry = servers.get(ctx.instanceId);
+        if (!entry) {
+          entry = await startServer(databaseUrl());
+          servers.set(ctx.instanceId, entry);
+        }
+        return { title: "Database Explorer", url: entry.url };
+      },
+      onClose: async (ctx) => {
+        const entry = servers.get(ctx.instanceId);
+        if (entry) {
+          servers.delete(ctx.instanceId);
+          await new Promise((resolve) => entry.server.close(resolve));
+        }
+      },
+    }),
+  ],
 });
