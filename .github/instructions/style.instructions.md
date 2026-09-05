@@ -45,6 +45,12 @@ ALL UI components MUST use dark theme colors:
 - Prefer utility classes over custom CSS when possible
 - Use semantic grouping: layout, spacing, colors, typography
 - Keep utility combinations readable and maintainable
+- Add a comment only when it explains why a non-obvious utility combination or custom rule is needed; do not annotate classes by paraphrasing their visual effect.
+
+## TypeScript in Astro and CSS scripts
+
+- Use two-space indentation, double quotes, semicolons, and trailing commas in multiline TypeScript.
+- Keep comments current and focused on intent, constraints, or design decisions rather than mechanics.
 
 ## Modern UI Patterns
 

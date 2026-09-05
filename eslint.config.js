@@ -27,6 +27,11 @@ export default [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+      // Keep TypeScript formatting consistent across the repository.
+      indent: ["error", 2, { SwitchCase: 1 }],
+      quotes: ["error", "double", { avoidEscape: true }],
+      semi: ["error", "always"],
+      "comma-dangle": ["error", "always-multiline"],
     },
   },
 
