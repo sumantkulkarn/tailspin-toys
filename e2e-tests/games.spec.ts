@@ -24,6 +24,25 @@ test.describe("Game Listing and Navigation", () => {
     });
   });
 
+  test("should filter games by category and publisher together", async ({ page }) => {
+    await test.step("Navigate to homepage", async () => {
+      await page.goto("/");
+      await expect(page.getByTestId("game-filters")).toBeVisible();
+    });
+
+    await test.step("Select a category and publisher", async () => {
+      await page.getByTestId("category-filter-1").check();
+      await page.getByTestId("publisher-filter").selectOption("1");
+    });
+
+    await test.step("Verify the combined filter results and URL state", async () => {
+      await expect(page).toHaveURL(/\/\?category=1&publisher=1$/);
+      await expect(page.getByTestId("filter-status")).toHaveText("Showing 1 game");
+      await expect(page.locator('[data-testid="game-card"]:not([hidden])')).toHaveCount(1);
+      await expect(page.getByTestId("game-title").filter({ hasText: "DevOps Dominion" })).toBeVisible();
+    });
+  });
+
   test("should navigate to correct game details page when clicking on a game", async ({ page }) => {
     let gameId: string | null;
     let gameTitle: string | null;
